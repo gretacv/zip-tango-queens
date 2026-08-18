@@ -1,0 +1,1449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Endless Zip, Tango &amp; Queens</title>
+<style>
+:root {
+  --bg: #f3f1ec;
+  --panel: #ffffff;
+  --ink: #1b1c1a;
+  --muted: #6d6b64;
+  --line: #dedad1;
+  --line-strong: #2b2c29;
+  --cell: #fbfaf7;
+  --cell-alt: #f0ede6;
+  --cell-fixed: #e6e1d5;
+  --accent: #4f46e5;
+  --accent-soft: #e8e7fd;
+  --good: #17795e;
+  --bad: #c2410c;
+  --bad-soft: #fde4d3;
+  --shadow: 0 1px 2px rgba(20,20,18,.06), 0 8px 24px rgba(20,20,18,.06);
+  --radius: 14px;
+  --r0:#f2a29d; --r1:#f8c98b; --r2:#efe391; --r3:#b5e0a0; --r4:#8fd9c6;
+  --r5:#a3ccf2; --r6:#bab5f0; --r7:#e0a9e8; --r8:#cdd1d6;
+}
+/* Dark palette applies when the OS asks for it, unless the reader has explicitly
+   chosen light; the [data-theme="dark"] block below lets an explicit dark choice
+   win over a light OS. Only tokens are redefined — never component rules. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a;
+    --panel: #202225;
+    --ink: #ecebe7;
+    --muted: #9b9a94;
+    --line: #34373b;
+    --line-strong: #e8e7e3;
+    --cell: #26292d;
+    --cell-alt: #2d3035;
+    --cell-fixed: #3a3f45;
+    --accent: #8b87f5;
+    --accent-soft: #2e2c50;
+    --good: #4ec99f;
+    --bad: #f08a5b;
+    --bad-soft: #4a2a1c;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --r0:#8d4744; --r1:#8a6231; --r2:#7c7233; --r3:#4a7a48; --r4:#2f776c;
+    --r5:#3a6893; --r6:#544f92; --r7:#7c4485; --r8:#565d66;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181a;
+  --panel: #202225;
+  --ink: #ecebe7;
+  --muted: #9b9a94;
+  --line: #34373b;
+  --line-strong: #e8e7e3;
+  --cell: #26292d;
+  --cell-alt: #2d3035;
+  --cell-fixed: #3a3f45;
+  --accent: #8b87f5;
+  --accent-soft: #2e2c50;
+  --good: #4ec99f;
+  --bad: #f08a5b;
+  --bad-soft: #4a2a1c;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  --r0:#8d4744; --r1:#8a6231; --r2:#7c7233; --r3:#4a7a48; --r4:#2f776c;
+  --r5:#3a6893; --r6:#544f92; --r7:#7c4485; --r8:#565d66;
+}
+* { box-sizing: border-box; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.qcell:focus-visible, .tcell:focus-visible { outline-offset: -3px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding: 18px 16px 56px;
+}
+.wrap { max-width: 640px; margin: 0 auto; }
+header { text-align: center; margin-bottom: 18px; }
+h1 { font-size: 19px; letter-spacing: -.01em; margin: 0 0 4px; font-weight: 650; }
+header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+.tabs { display: flex; gap: 6px; background: var(--panel); padding: 5px; border-radius: 999px;
+  box-shadow: var(--shadow); margin: 16px auto 18px; width: fit-content; }
+.tab { appearance: none; border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font: inherit; font-weight: 600; padding: 8px 20px; border-radius: 999px; transition: background .15s, color .15s; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--panel); }
+
+.card { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.panel[hidden] { display: none; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.toolbar .spacer { flex: 1 1 auto; }
+button.btn, select {
+  appearance: none; font: inherit; color: var(--ink); background: var(--cell);
+  border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+button.btn:hover:not(:disabled), select:hover { border-color: var(--muted); }
+button.btn:disabled { opacity: .42; cursor: default; }
+button.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); font-weight: 600; }
+select { padding-right: 26px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+  linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 15px, calc(100% - 9px) 15px;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.clock { font-variant-numeric: tabular-nums; font-weight: 650; font-size: 15px; }
+.best { color: var(--muted); font-size: 12.5px; }
+
+.status { min-height: 22px; margin: 12px 2px 0; font-size: 13.5px; color: var(--muted); text-align: center; }
+.status.win { color: var(--good); font-weight: 650; }
+.status.warn { color: var(--bad); }
+
+.board-wrap { position: relative; width: min(88vw, 480px); margin: 0 auto; aspect-ratio: 1; }
+.board-wrap.busy > * { opacity: .25; }
+.loading { position: absolute; inset: 0; display: none; place-items: center; color: var(--muted);
+  font-size: 13px; opacity: 1 !important; }
+.board-wrap.busy .loading { display: grid; }
+.spinner { width: 22px; height: 22px; border: 2.5px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Queens ---------- */
+.qgrid { display: grid; width: 100%; height: 100%; }
+.qcell { position: relative; border: 0; padding: 0; margin: 0; cursor: pointer; display: grid; place-items: center;
+  background: var(--fill); box-shadow: inset 0 0 0 .5px rgba(120,120,120,.35); }
+.qcell .mark { font-size: 0; line-height: 0; }
+.qcell svg { width: 62%; height: 62%; display: block; }
+.qcell .x { width: 26%; height: 26%; }
+.qcell.err svg { animation: shake .3s; }
+.qcell.err::after { content: ""; position: absolute; inset: 6%; border-radius: 8px;
+  box-shadow: 0 0 0 3px var(--bad); pointer-events: none; }
+.qcell.hint::after { content: ""; position: absolute; inset: 6%; border-radius: 8px;
+  box-shadow: 0 0 0 3px var(--accent); pointer-events: none; }
+@keyframes shake { 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+.overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* ---------- Tango ---------- */
+.tgrid { display: grid; width: 100%; height: 100%; gap: 0; }
+.tcell { border: 1px solid var(--line); border-radius: 10px; background: var(--cell); cursor: pointer;
+  display: grid; place-items: center; padding: 0; transition: background .12s; }
+.tcell:hover { background: var(--cell-alt); }
+.tcell.fixed { background: var(--cell-fixed); border-color: transparent; cursor: default; }
+.tcell.err { background: var(--bad-soft); border-color: var(--bad); }
+.tcell svg { width: 66%; height: 66%; }
+.tsign { display: grid; place-items: center; font-size: clamp(9px, 2.4vw, 13px); font-weight: 700; color: var(--muted); }
+.tsign.err { color: var(--bad); }
+
+/* ---------- Zip ---------- */
+.zboard { width: 100%; height: 100%; touch-action: none; -webkit-user-select: none; user-select: none; }
+
+.solved .qcell svg, .solved .tcell svg { animation: pop .45s cubic-bezier(.3,1.6,.5,1) backwards; }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } }
+
+details.rules { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.rules summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; list-style: none; }
+details.rules summary::-webkit-details-marker { display: none; }
+details.rules summary::before { content: "▸ "; }
+details.rules[open] summary::before { content: "▾ "; }
+details.rules ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+details.rules li { margin-bottom: 5px; }
+footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 22px; }
+kbd { font: inherit; font-size: 11px; background: var(--cell-alt); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px; }
+@media (max-width: 480px), (pointer: coarse) { footer { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Endless Zip, Tango &amp; Queens</h1>
+    <p>Freshly generated puzzles, as many as you like. No waiting for tomorrow.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-game="zip" aria-selected="true">Zip</button>
+    <button class="tab" role="tab" data-game="tango" aria-selected="false">Tango</button>
+    <button class="tab" role="tab" data-game="queens" aria-selected="false">Queens</button>
+  </div>
+
+  <!-- ZIP -->
+  <section class="card panel" id="panel-zip">
+    <div class="toolbar">
+      <select id="zip-size" aria-label="Board size">
+        <option value="5">5 × 5</option>
+        <option value="6" selected>6 × 6</option>
+        <option value="7">7 × 7</option>
+        <option value="8">8 × 8</option>
+      </select>
+      <button class="btn primary" id="zip-new">New puzzle</button>
+      <button class="btn" id="zip-undo">Undo</button>
+      <button class="btn" id="zip-hint">Hint</button>
+      <button class="btn" id="zip-clear">Clear</button>
+      <span class="spacer"></span>
+      <span class="clock" id="zip-clock">0:00</span>
+    </div>
+    <div class="board-wrap" id="zip-wrap">
+      <div class="loading"><div><div class="spinner"></div>building a fresh path…</div></div>
+      <svg class="zboard" id="zip-board" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="status" id="zip-status"></div>
+    <div class="status best" id="zip-best"></div>
+    <details class="rules">
+      <summary>How to play</summary>
+      <ul>
+        <li>Draw one continuous line that fills <strong>every cell</strong> of the grid.</li>
+        <li>The line must pass through the numbered cells <strong>in order</strong>: 1, then 2, then 3…</li>
+        <li>Move only up, down, left or right — never diagonally, never over yourself.</li>
+        <li>Drag from the <strong>1</strong> to draw. Drag back along the line, or tap a cell you already used, to rub it out.</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- TANGO -->
+  <section class="card panel" id="panel-tango" hidden>
+    <div class="toolbar">
+      <select id="tango-size" aria-label="Board size">
+        <option value="6" selected>6 × 6</option>
+        <option value="8">8 × 8</option>
+      </select>
+      <select id="tango-diff" aria-label="Difficulty">
+        <option value="6">Gentle</option>
+        <option value="3" selected>Standard</option>
+        <option value="0">Lean</option>
+      </select>
+      <button class="btn primary" id="tango-new">New puzzle</button>
+      <button class="btn" id="tango-undo">Undo</button>
+      <button class="btn" id="tango-hint">Hint</button>
+      <button class="btn" id="tango-clear">Clear</button>
+      <span class="spacer"></span>
+      <span class="clock" id="tango-clock">0:00</span>
+    </div>
+    <div class="board-wrap" id="tango-wrap">
+      <div class="loading"><div><div class="spinner"></div>balancing suns and moons…</div></div>
+      <div class="tgrid" id="tango-board"></div>
+    </div>
+    <div class="status" id="tango-status"></div>
+    <div class="status best" id="tango-best"></div>
+    <details class="rules">
+      <summary>How to play</summary>
+      <ul>
+        <li>Fill every cell with a <strong>sun</strong> or a <strong>moon</strong> — click a cell to cycle.</li>
+        <li>Each row and column holds an <strong>equal number of each</strong>.</li>
+        <li>No <strong>three in a row</strong> of the same symbol, horizontally or vertically.</li>
+        <li><strong>=</strong> between two cells means they match; <strong>×</strong> means they differ.</li>
+        <li>Every puzzle is solvable by pure logic — you never have to guess.</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- QUEENS -->
+  <section class="card panel" id="panel-queens" hidden>
+    <div class="toolbar">
+      <select id="queens-size" aria-label="Board size">
+        <option value="5">5 × 5</option>
+        <option value="6">6 × 6</option>
+        <option value="7">7 × 7</option>
+        <option value="8" selected>8 × 8</option>
+        <option value="9">9 × 9</option>
+      </select>
+      <button class="btn primary" id="queens-new">New puzzle</button>
+      <button class="btn" id="queens-undo">Undo</button>
+      <button class="btn" id="queens-hint">Hint</button>
+      <button class="btn" id="queens-clear">Clear</button>
+      <span class="spacer"></span>
+      <span class="clock" id="queens-clock">0:00</span>
+    </div>
+    <div class="board-wrap" id="queens-wrap">
+      <div class="loading"><div><div class="spinner"></div>colouring the regions…</div></div>
+      <div class="qgrid" id="queens-board"></div>
+      <svg class="overlay" id="queens-overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="status" id="queens-status"></div>
+    <div class="status best" id="queens-best"></div>
+    <details class="rules">
+      <summary>How to play</summary>
+      <ul>
+        <li>Place one crown in <strong>every row, every column and every colour region</strong>.</li>
+        <li>No two crowns may <strong>touch</strong> — not even at a corner.</li>
+        <li>Click once for a <strong>dot</strong> (your "definitely not here" mark), twice for a <strong>crown</strong>, three times to clear.</li>
+      </ul>
+    </details>
+  </section>
+
+  <footer>
+    <kbd>N</kbd> new puzzle · <kbd>U</kbd> undo · <kbd>H</kbd> hint · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> switch game
+  </footer>
+</div>
+
+<script>
+'use strict';
+/* ENGINE:START */
+/* ============================================================
+   Puzzle engines: Zip, Tango, Queens.
+   Every generator returns a puzzle with a proven unique solution.
+   ============================================================ */
+
+const rnd = n => Math.floor(Math.random() * n);
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = rnd(i + 1);
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+const neighbours = (idx, w, h) => {
+  const r = (idx / w) | 0, c = idx % w, out = [];
+  if (r > 0) out.push(idx - w);
+  if (r < h - 1) out.push(idx + w);
+  if (c > 0) out.push(idx - 1);
+  if (c < w - 1) out.push(idx + 1);
+  return out;
+};
+
+/* ==================== QUEENS ====================
+   One queen per row, column and colour region; no two queens touching,
+   diagonals included. Generation: lay down a valid queen set, grow colour
+   regions from those seeds, then repeatedly find a rival solution and move a
+   single cell to another region to kill it. */
+
+function queensRandomSolution(n) {
+  const cols = [], used = new Array(n).fill(false);
+  function place(r) {
+    if (r === n) return true;
+    for (const c of shuffle([...Array(n).keys()])) {
+      if (used[c]) continue;
+      if (r > 0 && Math.abs(cols[r - 1] - c) <= 1) continue;
+      used[c] = true; cols.push(c);
+      if (place(r + 1)) return true;
+      used[c] = false; cols.pop();
+    }
+    return false;
+  }
+  return place(0) ? cols : null;
+}
+
+function growRegions(n, cols) {
+  const total = n * n;
+  const region = new Int8Array(total).fill(-1);
+  const frontiers = Array.from({ length: n }, () => []);
+  const addNbrs = (reg, idx) => {
+    for (const k of neighbours(idx, n, n)) if (region[k] === -1) frontiers[reg].push(k);
+  };
+  for (let i = 0; i < n; i++) region[i * n + cols[i]] = i;
+  for (let i = 0; i < n; i++) addNbrs(i, i * n + cols[i]);
+
+  let assigned = n;
+  const active = [];
+  while (assigned < total) {
+    active.length = 0;
+    for (let i = 0; i < n; i++) if (frontiers[i].length) active.push(i);
+    if (!active.length) return null;
+    const reg = active[rnd(active.length)];
+    const f = frontiers[reg];
+    const pick = rnd(f.length);
+    const idx = f[pick];
+    f[pick] = f[f.length - 1]; f.pop();
+    if (region[idx] !== -1) continue;
+    region[idx] = reg; assigned++;
+    addNbrs(reg, idx);
+  }
+  return region;
+}
+
+function countQueensSolutions(n, region, limit) {
+  const colUsed = new Uint8Array(n), regUsed = new Uint8Array(n);
+  let count = 0;
+  function walk(r, prev) {
+    if (r === n) { count++; return; }
+    for (let c = 0; c < n; c++) {
+      if (colUsed[c]) continue;
+      if (r > 0 && Math.abs(prev - c) <= 1) continue;
+      const g = region[r * n + c];
+      if (regUsed[g]) continue;
+      colUsed[c] = 1; regUsed[g] = 1;
+      walk(r + 1, c);
+      colUsed[c] = 0; regUsed[g] = 0;
+      if (count >= limit) return;
+    }
+  }
+  walk(0, -5);
+  return count;
+}
+
+// First solution that differs from `avoid`, or null when `avoid` is unique.
+function findRivalSolution(n, region, avoid) {
+  const colUsed = new Uint8Array(n), regUsed = new Uint8Array(n), cur = new Array(n);
+  let found = null;
+  function walk(r, prev) {
+    if (found) return;
+    if (r === n) {
+      for (let i = 0; i < n; i++) if (cur[i] !== avoid[i]) { found = cur.slice(); return; }
+      return;
+    }
+    for (let c = 0; c < n; c++) {
+      if (colUsed[c]) continue;
+      if (r > 0 && Math.abs(prev - c) <= 1) continue;
+      const g = region[r * n + c];
+      if (regUsed[g]) continue;
+      colUsed[c] = 1; regUsed[g] = 1; cur[r] = c;
+      walk(r + 1, c);
+      colUsed[c] = 0; regUsed[g] = 0;
+      if (found) return;
+    }
+  }
+  walk(0, -5);
+  return found;
+}
+
+function regionStaysConnected(n, region, g, removed) {
+  const cells = [];
+  for (let i = 0; i < n * n; i++) if (region[i] === g && i !== removed) cells.push(i);
+  if (!cells.length) return false;
+  const seen = new Set([cells[0]]), stack = [cells[0]];
+  while (stack.length) {
+    const i = stack.pop();
+    for (const k of neighbours(i, n, n)) {
+      if (k !== removed && region[k] === g && !seen.has(k)) { seen.add(k); stack.push(k); }
+    }
+  }
+  return seen.size === cells.length;
+}
+
+function regionSizes(n, region) {
+  const cnt = new Array(n).fill(0);
+  for (const g of region) cnt[g]++;
+  return cnt;
+}
+
+// Move one cell of the rival solution into a neighbouring region: the rival then
+// has two queens in that region and none in the old one, so it dies. The real
+// solution is untouched because seed cells never move.
+function killRival(n, region, sol, rival) {
+  const cnt = regionSizes(n, region);
+  for (const r of shuffle([...Array(n).keys()]).filter(r => rival[r] !== sol[r])) {
+    const idx = r * n + rival[r];
+    const g = region[idx];
+    if (cnt[g] <= 1) continue;
+    const targets = [...new Set(neighbours(idx, n, n).map(k => region[k]))].filter(x => x !== g);
+    if (!targets.length) continue;
+    if (!regionStaysConnected(n, region, g, idx)) continue;
+    targets.sort((a, b) => cnt[a] - cnt[b]);   // hand the cell to the smallest neighbour
+    region[idx] = targets[0];
+    return true;
+  }
+  return false;
+}
+
+// Cosmetic pass: even the regions out — feed the runts, shave the giants —
+// keeping the solution unique. Queen cells never move: that would strand a
+// region without its queen.
+function rebalanceRegions(n, region, solution, budget) {
+  const seeds = new Set(solution.map((c, r) => r * n + c));
+  const avg = n;
+  const minSize = Math.max(2, Math.round(avg / 2.5));
+
+  // Hand cell `idx` to region `target`, unless that spoils the puzzle.
+  const tryMove = (idx, target) => {
+    const from = region[idx];
+    if (seeds.has(idx) || from === target) return false;
+    if (!regionStaysConnected(n, region, from, idx)) return false;
+    region[idx] = target;
+    if (countQueensSolutions(n, region, 2) === 1) return true;
+    region[idx] = from;
+    return false;
+  };
+
+  for (let tries = 0; tries < budget; tries++) {
+    const cnt = regionSizes(n, region);
+    let big = 0, small = 0;
+    for (let g = 1; g < n; g++) {
+      if (cnt[g] > cnt[big]) big = g;
+      if (cnt[g] < cnt[small]) small = g;
+    }
+    const growRunt = cnt[small] < minSize;
+    if (!growRunt && cnt[big] <= avg * 1.7) return;
+
+    const moves = [];
+    if (growRunt) {                       // pull a neighbour into the runt region
+      for (let i = 0; i < n * n; i++) {
+        if (region[i] !== small) continue;
+        for (const k of neighbours(i, n, n)) {
+          if (region[k] !== small && cnt[region[k]] > minSize && !seeds.has(k)) moves.push([k, small]);
+        }
+      }
+    } else {                              // push a border cell out of the giant region
+      for (let i = 0; i < n * n; i++) {
+        if (region[i] !== big || seeds.has(i)) continue;
+        for (const k of neighbours(i, n, n)) {
+          if (region[k] !== big && cnt[region[k]] < cnt[big] - 1) moves.push([i, region[k]]);
+        }
+      }
+    }
+    if (!moves.length) return;
+    const [idx, target] = moves[rnd(moves.length)];
+    tryMove(idx, target);
+  }
+}
+
+function buildQueensBoard(n) {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const cols = queensRandomSolution(n);
+    if (!cols) return null;
+    const region = growRegions(n, cols);
+    if (!region) continue;
+    for (let iter = 0; iter < 5000; iter++) {
+      const rival = findRivalSolution(n, region, cols);
+      if (!rival) {
+        rebalanceRegions(n, region, cols, 150);
+        return { n, region: Array.from(region), solution: cols.slice() };
+      }
+      if (!killRival(n, region, cols, rival)) break;   // stuck: start over
+    }
+  }
+  return null;
+}
+
+function generateQueens(n) {
+  // A one-cell region hands the player a queen for free, so prefer a board
+  // without one — but take what we can get rather than spinning forever.
+  let fallback = null;
+  for (let round = 0; round < 6; round++) {
+    const board = buildQueensBoard(n);
+    if (!board) continue;
+    const sizes = regionSizes(n, board.region);
+    if (Math.min(...sizes) >= 2 && Math.max(...sizes) <= n * 2.2) return board;
+    fallback = fallback || board;
+  }
+  return fallback;
+}
+
+/* ==================== TANGO ====================
+   n x n grid of two symbols; n/2 of each per row and column; never three
+   alike in a row; '=' / 'x' signs between neighbours. Clues are pared back
+   only as far as the basic solving rules can still crack the grid, so every
+   puzzle is solvable without guessing (which also proves it unique). */
+
+function tangoFullGrid(n) {
+  const g = new Array(n * n).fill(-1);
+  const half = n / 2;
+  const rowCount = Array.from({ length: n }, () => [0, 0]);
+  const colCount = Array.from({ length: n }, () => [0, 0]);
+  function fill(i) {
+    if (i === n * n) return true;
+    const r = (i / n) | 0, c = i % n;
+    for (const v of shuffle([0, 1])) {
+      if (rowCount[r][v] >= half || colCount[c][v] >= half) continue;
+      if (c >= 2 && g[i - 1] === v && g[i - 2] === v) continue;
+      if (r >= 2 && g[i - n] === v && g[i - 2 * n] === v) continue;
+      g[i] = v; rowCount[r][v]++; colCount[c][v]++;
+      if (fill(i + 1)) return true;
+      g[i] = -1; rowCount[r][v]--; colCount[c][v]--;
+    }
+    return false;
+  }
+  return fill(0) ? g : null;
+}
+
+// Deterministic solver using the three rules a player actually uses.
+// Returns the grid it managed to fill, or null on contradiction.
+function tangoLogicSolve(n, givens, edges) {
+  const half = n / 2;
+  const g = givens.slice();
+  const inc = Array.from({ length: n * n }, () => []);
+  for (const e of edges) {
+    inc[e.a].push([e.b, e.type]);
+    inc[e.b].push([e.a, e.type]);
+  }
+  const lines = [];
+  for (let r = 0; r < n; r++) lines.push([...Array(n).keys()].map(c => r * n + c));
+  for (let c = 0; c < n; c++) lines.push([...Array(n).keys()].map(r => r * n + c));
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // 1. signs
+    for (let i = 0; i < n * n; i++) {
+      if (g[i] === -1) continue;
+      for (const [j, type] of inc[i]) {
+        const want = type === '=' ? g[i] : 1 - g[i];
+        if (g[j] === -1) { g[j] = want; changed = true; }
+        else if (g[j] !== want) return null;
+      }
+    }
+    // 2. never three alike
+    for (const line of lines) {
+      for (let k = 0; k + 2 < n; k++) {
+        const cells = [line[k], line[k + 1], line[k + 2]];
+        const vals = cells.map(i => g[i]);
+        const unknown = vals.filter(v => v === -1).length;
+        if (unknown !== 1) {
+          if (unknown === 0 && vals[0] === vals[1] && vals[1] === vals[2]) return null;
+          continue;
+        }
+        const known = vals.filter(v => v !== -1);
+        if (known[0] !== known[1]) continue;
+        const slot = cells[vals.indexOf(-1)];
+        g[slot] = 1 - known[0];
+        changed = true;
+      }
+    }
+    // 3. half of each per line
+    for (const line of lines) {
+      for (let v = 0; v < 2; v++) {
+        const have = line.filter(i => g[i] === v).length;
+        if (have > half) return null;
+        if (have !== half) continue;
+        for (const i of line) if (g[i] === -1) { g[i] = 1 - v; changed = true; }
+      }
+    }
+  }
+  return g;
+}
+
+const tangoSolved = (n, grid) => grid !== null && grid.every(v => v !== -1);
+
+// `extraGivens` is the difficulty dial: the puzzle is first pared back to a lean
+// set of clues, then that many extra cells are handed back to the player.
+function generateTango(n, extraGivens) {
+  const solution = tangoFullGrid(n);
+  if (!solution) return null;
+
+  let edges = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const i = r * n + c;
+      if (c < n - 1) edges.push({ a: i, b: i + 1, type: solution[i] === solution[i + 1] ? '=' : 'x' });
+      if (r < n - 1) edges.push({ a: i, b: i + n, type: solution[i] === solution[i + n] ? '=' : 'x' });
+    }
+  }
+
+  const givens = new Array(n * n).fill(-1);
+  const seeds = shuffle([...Array(n * n).keys()]).slice(0, 3);
+  for (const c of seeds) givens[c] = solution[c];
+  if (!tangoSolved(n, tangoLogicSolve(n, givens, edges))) return null;
+
+  // Strip clues while the basic rules still finish the grid unaided.
+  const candidates = shuffle([
+    ...edges.map(e => ({ kind: 'edge', ref: e })),
+    ...seeds.map(c => ({ kind: 'given', ref: c })),
+  ]);
+  for (const cand of candidates) {
+    if (cand.kind === 'edge') {
+      const trimmed = edges.filter(e => e !== cand.ref);
+      if (tangoSolved(n, tangoLogicSolve(n, givens, trimmed))) edges = trimmed;
+    } else {
+      const saved = givens[cand.ref];
+      givens[cand.ref] = -1;
+      if (!tangoSolved(n, tangoLogicSolve(n, givens, edges))) givens[cand.ref] = saved;
+    }
+  }
+
+  // Extra givens only ever add information, so the puzzle stays no-guess.
+  const spare = shuffle([...Array(n * n).keys()].filter(i => givens[i] === -1));
+  for (const i of spare.slice(0, extraGivens)) givens[i] = solution[i];
+
+  return { n, givens, edges, solution };
+}
+
+/* ==================== ZIP ====================
+   One path through every cell, meeting the numbers in order. Generation:
+   shuffle a Hamiltonian path with backbite moves, then add numbered stops
+   until the path is the only way through. */
+
+function randomHamiltonianPath(w, h) {
+  const total = w * h;
+  const path = [];
+  for (let r = 0; r < h; r++) {
+    for (let k = 0; k < w; k++) path.push(r * w + (r % 2 === 0 ? k : w - 1 - k));
+  }
+  const pos = new Int32Array(total);
+  path.forEach((cell, i) => { pos[cell] = i; });
+
+  for (let it = 0; it < total * 300; it++) {
+    if (rnd(2) === 0) {                       // work the head half the time
+      path.reverse();
+      for (let k = 0; k < total; k++) pos[path[k]] = k;
+    }
+    const options = neighbours(path[total - 1], w, h);
+    const cell = options[rnd(options.length)];
+    if (cell === path[total - 2]) continue;
+    const i = pos[cell];
+    for (let a = i + 1, b = total - 1; a < b; a++, b--) {
+      const t = path[a]; path[a] = path[b]; path[b] = t;
+    }
+    for (let k = i + 1; k < total; k++) pos[path[k]] = k;
+  }
+  return path;
+}
+
+function zipCountSolutions(w, h, numbers, limit, budget) {
+  const total = w * h;
+  let start = -1, end = -1, maxNum = 0;
+  for (let i = 0; i < total; i++) {
+    if (numbers[i] === 1) start = i;
+    if (numbers[i] > maxNum) { maxNum = numbers[i]; end = i; }
+  }
+  const nbrs = [], colour = new Uint8Array(total);
+  for (let i = 0; i < total; i++) {
+    nbrs.push(neighbours(i, w, h));
+    colour[i] = (((i / w) | 0) + (i % w)) & 1;
+  }
+  const visited = new Uint8Array(total), queue = new Int32Array(total), seen = new Uint8Array(total);
+  const unvisitedByColour = [0, 0];
+  for (let i = 0; i < total; i++) unvisitedByColour[colour[i]]++;
+  let count = 0, nodes = 0, timeout = false;
+
+  const reachesAll = (cur, remaining) => {
+    seen.fill(0);
+    let head = 0, tail = 0, found = 0;
+    for (const nb of nbrs[cur]) if (!visited[nb] && !seen[nb]) { seen[nb] = 1; queue[tail++] = nb; found++; }
+    while (head < tail) {
+      for (const nb of nbrs[queue[head++]]) {
+        if (!visited[nb] && !seen[nb]) { seen[nb] = 1; queue[tail++] = nb; found++; }
+      }
+    }
+    return found === remaining;
+  };
+
+  // Every unvisited cell still needs two path neighbours (one if it is the finish).
+  const degreesOK = cur => {
+    for (let i = 0; i < total; i++) {
+      if (visited[i]) continue;
+      let d = 0;
+      for (const nb of nbrs[i]) if (!visited[nb] || nb === cur) d++;
+      if (d < (i === end ? 1 : 2)) return false;
+    }
+    return true;
+  };
+
+  function walk(cur, depth, nextNum) {
+    if (++nodes > budget) { timeout = true; return; }
+    if (depth === total) { count++; return; }
+    const remaining = total - depth;
+    const here = colour[cur];
+    // the rest of the path alternates colours, so the counts are forced
+    if (unvisitedByColour[1 - here] !== Math.ceil(remaining / 2)) return;
+    if (unvisitedByColour[here] !== Math.floor(remaining / 2)) return;
+    if (colour[end] !== (remaining % 2 === 1 ? 1 - here : here)) return;
+    if (!reachesAll(cur, remaining)) return;
+    if (!degreesOK(cur)) return;
+    for (const nb of nbrs[cur]) {
+      if (visited[nb]) continue;
+      if (nb === end && depth + 1 !== total) continue;
+      const num = numbers[nb];
+      if (num > 0 && num !== nextNum) continue;
+      visited[nb] = 1; unvisitedByColour[colour[nb]]--;
+      walk(nb, depth + 1, num > 0 ? nextNum + 1 : nextNum);
+      visited[nb] = 0; unvisitedByColour[colour[nb]]++;
+      if (count >= limit || timeout) return;
+    }
+  }
+
+  visited[start] = 1; unvisitedByColour[colour[start]]--;
+  walk(start, 1, 2);
+  return { count, timeout };
+}
+
+function numbersFromStops(path, stops, total) {
+  const numbers = new Array(total).fill(0);
+  [...stops].sort((a, b) => a - b).forEach((p, k) => { numbers[path[p]] = k + 1; });
+  return numbers;
+}
+
+function generateZip(w, h) {
+  const total = w * h;
+  const budget = 8000000;              // generous: a stalled count costs more than it saves
+  const startStops = Math.round(total / 5) + 1;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const path = randomHamiltonianPath(w, h);
+    const stops = new Set([0, total - 1]);
+    while (stops.size < startStops) stops.add(1 + rnd(total - 2));
+
+    // Keep adding stops until the path is forced. Every extra stop constrains
+    // the route further, so this always converges; the trim pass below then
+    // takes back the ones that turned out to be redundant.
+    for (let step = 0; step < total; step++) {
+      const res = zipCountSolutions(w, h, numbersFromStops(path, stops, total), 2, budget);
+      if (!res.timeout && res.count === 1) {
+        for (const p of shuffle([...stops].filter(p => p !== 0 && p !== total - 1))) {
+          if (stops.size <= 3) break;
+          stops.delete(p);
+          const trial = zipCountSolutions(w, h, numbersFromStops(path, stops, total), 2, budget);
+          if (trial.timeout || trial.count !== 1) stops.add(p);
+        }
+        return { w, h, numbers: numbersFromStops(path, stops, total), path: path.slice() };
+      }
+      if (stops.size >= total - 1) break;
+      let tries = 0;
+      while (tries++ < 400) {
+        const p = 1 + rnd(total - 2);
+        if (!stops.has(p)) { stops.add(p); break; }
+      }
+    }
+  }
+  return null;
+}
+/* ENGINE:END */
+
+/* ============================================================
+   PART 2 — SHARED UI PLUMBING
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const svgEl = (name, attrs) => {
+  const el = document.createElementNS(SVG_NS, name);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+};
+
+function formatTime(ms) {
+  const total = Math.floor(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+class Clock {
+  constructor(el) { this.el = el; this.reset(); }
+  reset() {
+    this.stop();
+    this.elapsed = 0; this.startedAt = null;
+    this.el.textContent = '0:00';
+  }
+  start() {
+    if (this.startedAt !== null) return;
+    this.startedAt = performance.now();
+    this.handle = setInterval(() => this.paint(), 250);
+  }
+  stop() {
+    if (this.startedAt !== null) this.elapsed += performance.now() - this.startedAt;
+    this.startedAt = null;
+    clearInterval(this.handle);
+  }
+  read() { return this.elapsed + (this.startedAt === null ? 0 : performance.now() - this.startedAt); }
+  paint() { this.el.textContent = formatTime(this.read()); }
+}
+
+const store = {
+  read(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch (err) { return fallback; }
+  },
+  write(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) { /* private mode */ }
+  },
+};
+
+// Records a finished puzzle and returns the line of text to show under the board.
+function recordWin(game, variant, ms, cheated) {
+  const solvedKey = `pz.solved.${game}`;
+  const solved = store.read(solvedKey, 0) + 1;
+  store.write(solvedKey, solved);
+  const bestKey = `pz.best.${game}.${variant}`;
+  const previous = store.read(bestKey, null);
+  let note = '';
+  if (cheated) {
+    note = 'solved with a hint — no record set';
+  } else if (previous === null || ms < previous) {
+    store.write(bestKey, ms);
+    note = previous === null ? 'first time on this size' : `new best, beating ${formatTime(previous)}`;
+  } else {
+    note = `best on this size: ${formatTime(previous)}`;
+  }
+  return `${note} · ${solved} solved in total`;
+}
+
+function bestLine(game, variant) {
+  const best = store.read(`pz.best.${game}.${variant}`, null);
+  const solved = store.read(`pz.solved.${game}`, 0);
+  const parts = [];
+  if (best !== null) parts.push(`best ${formatTime(best)}`);
+  if (solved) parts.push(`${solved} solved`);
+  return parts.join(' · ');
+}
+
+// Generation blocks the main thread, so let the spinner paint first, then work.
+// A timer rather than requestAnimationFrame: frames stop in a background tab,
+// and a puzzle asked for there should still be waiting when you come back.
+function withSpinner(wrap, work) {
+  wrap.classList.add('busy');
+  setTimeout(() => {
+    try { work(); } finally { wrap.classList.remove('busy'); }
+  }, 40);
+}
+
+const CROWN = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 8.4c.7 0 1.3.6 1.3 1.3 0 .4-.2.8-.5 1l1.9 3.3 3.1-4a1.3 1.3 0 0 1 .9-2.3 1.3 1.3 0 0 1 1.3 1.3c0 .5-.2.8-.6 1.1l2.3 4 2.4-4c-.4-.3-.6-.6-.6-1.1a1.3 1.3 0 1 1 2.2.9l3.1 4.1 1.9-3.3a1.3 1.3 0 0 1-.5-1 1.3 1.3 0 1 1 2.6 0c0 .7-.6 1.3-1.3 1.3l-1.6 7H5.1l-1.6-7A1.3 1.3 0 0 1 2.2 9.7c0-.7.6-1.3 1.3-1.3Z"/><rect x="4.6" y="17.3" width="14.8" height="2.5" rx=".8"/></svg>`;
+const DOT = `<svg class="x" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><circle cx="5" cy="5" r="5"/></svg>`;
+const SUN = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.2" fill="#e8a33d"/><g stroke="#e8a33d" stroke-width="1.9" stroke-linecap="round"><path d="M12 1.6v2.6M12 19.8v2.6M22.4 12h-2.6M4.2 12H1.6M19.4 4.6l-1.8 1.8M6.4 17.6l-1.8 1.8M19.4 19.4l-1.8-1.8M6.4 6.4 4.6 4.6"/></g></svg>`;
+const MOON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#6b7cd6" d="M20 14.6A8.6 8.6 0 0 1 9.4 4a8.6 8.6 0 1 0 10.6 10.6Z"/></svg>`;
+
+/* ============================================================
+   PART 3 — ZIP
+   ============================================================ */
+
+const Zip = (() => {
+  const wrap = $('zip-wrap'), board = $('zip-board'), status = $('zip-status'), best = $('zip-best');
+  const clock = new Clock($('zip-clock'));
+  const CELL = 100;
+  let puzzle = null, path = [], done = false, hinted = false, dragging = false, lastCell = -1;
+
+  const size = () => Number($('zip-size').value);
+
+  function newPuzzle() {
+    const n = size();
+    withSpinner(wrap, () => {
+      const made = generateZip(n, n);
+      if (!made) { status.textContent = 'That one got away — press New puzzle again.'; return; }
+      puzzle = made;
+      path = []; done = false; hinted = false;
+      clock.reset();
+      render();
+      say('Drag from 1 to fill every cell.');
+      best.textContent = bestLine('zip', n);
+    });
+  }
+
+  function say(text, cls = '') {
+    status.textContent = text;
+    status.className = 'status ' + cls;
+  }
+
+  const visitedSet = () => new Set(path);
+  const nextNumber = () => path.reduce((acc, cell) => acc + (puzzle.numbers[cell] > 0 ? 1 : 0), 0) + 1;
+
+  function canEnter(cell) {
+    const num = puzzle.numbers[cell];
+    return num === 0 || num === nextNumber();
+  }
+
+  function render() {
+    const { w, h, numbers } = puzzle;
+    board.setAttribute('viewBox', `-4 -4 ${w * CELL + 8} ${h * CELL + 8}`);
+    board.replaceChildren();
+
+    for (let i = 0; i < w * h; i++) {
+      const r = (i / w) | 0, c = i % w;
+      board.appendChild(svgEl('rect', {
+        x: c * CELL + 2, y: r * CELL + 2, width: CELL - 4, height: CELL - 4, rx: 12,
+        fill: 'var(--cell)', stroke: 'var(--line)', 'stroke-width': 2,
+      }));
+    }
+
+    const line = svgEl('polyline', {
+      fill: 'none', stroke: 'var(--accent)', 'stroke-width': CELL * 0.46,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round', opacity: .92,
+    });
+    line.id = 'zip-path';
+    board.appendChild(line);
+
+    for (let i = 0; i < w * h; i++) {
+      if (!numbers[i]) continue;
+      const r = (i / w) | 0, c = i % w;
+      const cx = c * CELL + CELL / 2, cy = r * CELL + CELL / 2;
+      board.appendChild(svgEl('circle', { cx, cy, r: CELL * 0.31, fill: 'var(--line-strong)' }));
+      const text = svgEl('text', {
+        x: cx, y: cy, fill: 'var(--panel)', 'font-size': CELL * 0.38, 'font-weight': 700,
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+        'font-family': 'ui-sans-serif, system-ui, sans-serif',
+      });
+      text.textContent = numbers[i];
+      board.appendChild(text);
+    }
+    paintPath();
+  }
+
+  function paintPath() {
+    const line = $('zip-path');
+    if (!line) return;
+    const { w } = puzzle;
+    line.setAttribute('points', path.map(cell => {
+      const r = (cell / w) | 0, c = cell % w;
+      return `${c * CELL + CELL / 2},${r * CELL + CELL / 2}`;
+    }).join(' '));
+  }
+
+  function cellAt(event) {
+    const rect = board.getBoundingClientRect();
+    if (!rect.width || !rect.height) return -1;      // board not laid out yet
+    const { w, h } = puzzle;
+    const x = Math.floor((event.clientX - rect.left) / rect.width * w);
+    const y = Math.floor((event.clientY - rect.top) / rect.height * h);
+    if (x < 0 || y < 0 || x >= w || y >= h) return -1;
+    return y * w + x;
+  }
+
+  const adjacent = (a, b) => {
+    const { w } = puzzle;
+    return Math.abs(((a / w) | 0) - ((b / w) | 0)) + Math.abs((a % w) - (b % w)) === 1;
+  };
+
+  function tryStep(cell) {
+    if (cell < 0 || done || !puzzle) return;
+    if (!path.length) {
+      if (puzzle.numbers[cell] === 1) { path = [cell]; clock.start(); after(); }
+      else say('Start on the 1.', 'warn');
+      return;
+    }
+    const at = path.indexOf(cell);
+    if (at !== -1) { path = path.slice(0, at + 1); after(); return; }   // rub out
+    if (!adjacent(path[path.length - 1], cell)) return;
+    if (!canEnter(cell)) { say(`Reach ${nextNumber()} before ${puzzle.numbers[cell]}.`, 'warn'); return; }
+    path.push(cell);
+    clock.start();
+    after();
+  }
+
+  function after() {
+    paintPath();
+    if (path.length === puzzle.w * puzzle.h) {
+      done = true;
+      clock.stop();
+      const note = recordWin('zip', puzzle.w, clock.read(), hinted);
+      say(`Zipped in ${formatTime(clock.read())} — ${note}`, 'win');
+      best.textContent = bestLine('zip', puzzle.w);
+    } else if (path.length) {
+      const left = puzzle.w * puzzle.h - path.length;
+      say(`${left} cell${left === 1 ? '' : 's'} to go.`);
+    } else {
+      say('Drag from 1 to fill every cell.');
+    }
+  }
+
+  board.addEventListener('pointerdown', event => {
+    if (!puzzle) return;
+    event.preventDefault();
+    board.setPointerCapture(event.pointerId);
+    dragging = true;
+    lastCell = cellAt(event);
+    tryStep(lastCell);
+  });
+  board.addEventListener('pointermove', event => {
+    if (!dragging || !puzzle) return;
+    const cell = cellAt(event);
+    if (cell === lastCell) return;
+    lastCell = cell;
+    tryStep(cell);
+  });
+  const release = () => { dragging = false; lastCell = -1; };
+  board.addEventListener('pointerup', release);
+  board.addEventListener('pointercancel', release);
+
+  $('zip-new').addEventListener('click', newPuzzle);
+  $('zip-size').addEventListener('change', newPuzzle);
+  $('zip-clear').addEventListener('click', () => { if (!puzzle) return; path = []; done = false; clock.reset(); after(); });
+  $('zip-undo').addEventListener('click', () => {
+    if (!puzzle || done || !path.length) return;
+    path.pop(); after();
+  });
+  $('zip-hint').addEventListener('click', () => {
+    if (!puzzle || done) return;
+    hinted = true;
+    clock.start();
+    let common = 0;                                  // keep whatever already matches the real path
+    while (common < path.length && path[common] === puzzle.path[common]) common++;
+    // on track: lay down one more cell. Off track: rewind to the last good cell.
+    path = puzzle.path.slice(0, common === path.length ? common + 1 : Math.max(common, 1));
+    after();
+  });
+
+  return { newPuzzle, hint: () => $('zip-hint').click(), undo: () => $('zip-undo').click(),
+    refreshBest: () => { best.textContent = bestLine('zip', size()); } };
+})();
+
+/* ============================================================
+   PART 4 — TANGO
+   ============================================================ */
+
+const Tango = (() => {
+  const wrap = $('tango-wrap'), board = $('tango-board'), status = $('tango-status'), best = $('tango-best');
+  const clock = new Clock($('tango-clock'));
+  let puzzle = null, cells = [], grid = [], history = [], done = false, hinted = false;
+  let cellNodes = [], signNodes = [];
+
+  const size = () => Number($('tango-size').value);
+  const extras = () => Number($('tango-diff').value);
+
+  function newPuzzle() {
+    const n = size(), extraGivens = extras();
+    withSpinner(wrap, () => {
+      let made = null, tries = 0;
+      while (!made && tries++ < 40) made = generateTango(n, extraGivens);
+      if (!made) { status.textContent = 'That one got away — press New puzzle again.'; return; }
+      puzzle = made;
+      grid = made.givens.slice();
+      history = []; done = false; hinted = false;
+      clock.reset();
+      build();
+      say('Fill every cell with a sun or a moon.');
+      best.textContent = bestLine('tango', n);
+    });
+  }
+
+  function say(text, cls = '') {
+    status.textContent = text;
+    status.className = 'status ' + cls;
+  }
+
+  function build() {
+    const n = puzzle.n;
+    const tracks = [];
+    for (let i = 0; i < n; i++) { tracks.push('1fr'); if (i < n - 1) tracks.push('var(--mark)'); }
+    board.style.setProperty('--mark', `clamp(10px, ${28 / n}vw, 18px)`);
+    board.style.gridTemplateColumns = tracks.join(' ');
+    board.style.gridTemplateRows = tracks.join(' ');
+    board.replaceChildren();
+    board.classList.remove('solved');
+
+    cellNodes = [];
+    for (let i = 0; i < n * n; i++) {
+      const r = (i / n) | 0, c = i % n;
+      const cell = document.createElement('button');
+      cell.className = 'tcell';
+      cell.style.gridColumn = 2 * c + 1;
+      cell.style.gridRow = 2 * r + 1;
+      cell.addEventListener('click', () => cycle(i));
+      cell.addEventListener('contextmenu', event => { event.preventDefault(); cycle(i, true); });
+      cellNodes.push(cell);
+      board.appendChild(cell);
+    }
+
+    signNodes = puzzle.edges.map(edge => {
+      const n2 = puzzle.n;
+      const ar = (edge.a / n2) | 0, ac = edge.a % n2;
+      const horizontal = edge.b === edge.a + 1;
+      const node = document.createElement('div');
+      node.className = 'tsign';
+      node.textContent = edge.type === '=' ? '=' : '×';
+      node.style.gridColumn = horizontal ? 2 * ac + 2 : 2 * ac + 1;
+      node.style.gridRow = horizontal ? 2 * ar + 1 : 2 * ar + 2;
+      board.appendChild(node);
+      return node;
+    });
+    paint();
+  }
+
+  function cycle(i, backwards) {
+    if (done || puzzle.givens[i] !== -1) return;
+    history.push(grid.slice());
+    const order = backwards ? [-1, 1, 0] : [-1, 0, 1];
+    grid[i] = order[(order.indexOf(grid[i]) + 1) % 3];
+    clock.start();
+    paint();
+  }
+
+  // Which cells / signs currently break a rule.
+  function findFaults() {
+    const n = puzzle.n, half = n / 2;
+    const badCells = new Set(), badSigns = new Set();
+    const lines = [];
+    for (let r = 0; r < n; r++) lines.push([...Array(n).keys()].map(c => r * n + c));
+    for (let c = 0; c < n; c++) lines.push([...Array(n).keys()].map(r => r * n + c));
+
+    for (const line of lines) {
+      for (let v = 0; v < 2; v++) {
+        const hits = line.filter(i => grid[i] === v);
+        if (hits.length > half) hits.forEach(i => badCells.add(i));
+      }
+      for (let k = 0; k + 2 < n; k++) {
+        const trio = [line[k], line[k + 1], line[k + 2]];
+        if (grid[trio[0]] !== -1 && grid[trio[0]] === grid[trio[1]] && grid[trio[1]] === grid[trio[2]]) {
+          trio.forEach(i => badCells.add(i));
+        }
+      }
+    }
+    puzzle.edges.forEach((edge, idx) => {
+      const a = grid[edge.a], b = grid[edge.b];
+      if (a === -1 || b === -1) return;
+      const okay = edge.type === '=' ? a === b : a !== b;
+      if (!okay) { badSigns.add(idx); badCells.add(edge.a); badCells.add(edge.b); }
+    });
+    return { badCells, badSigns };
+  }
+
+  function paint() {
+    const { badCells, badSigns } = findFaults();
+    cellNodes.forEach((node, i) => {
+      node.innerHTML = grid[i] === 0 ? SUN : grid[i] === 1 ? MOON : '';
+      node.classList.toggle('fixed', puzzle.givens[i] !== -1);
+      node.classList.toggle('err', badCells.has(i));
+    });
+    signNodes.forEach((node, idx) => node.classList.toggle('err', badSigns.has(idx)));
+
+    if (done) return;
+    const filled = grid.every(v => v !== -1);
+    if (filled && badCells.size === 0) {
+      done = true;
+      clock.stop();
+      board.classList.add('solved');
+      const note = recordWin('tango', puzzle.n, clock.read(), hinted);
+      say(`Balanced in ${formatTime(clock.read())} — ${note}`, 'win');
+      best.textContent = bestLine('tango', puzzle.n);
+    } else if (badCells.size) {
+      say('Something clashes — the red cells break a rule.', 'warn');
+    } else {
+      const left = grid.filter(v => v === -1).length;
+      say(`${left} cell${left === 1 ? '' : 's'} to go.`);
+    }
+  }
+
+  $('tango-new').addEventListener('click', newPuzzle);
+  $('tango-size').addEventListener('change', newPuzzle);
+  $('tango-diff').addEventListener('change', newPuzzle);
+  $('tango-undo').addEventListener('click', () => {
+    if (!puzzle || done || !history.length) return;
+    grid = history.pop();
+    paint();
+  });
+  $('tango-clear').addEventListener('click', () => {
+    if (!puzzle) return;
+    history.push(grid.slice());
+    grid = puzzle.givens.slice();
+    done = false;
+    clock.reset();
+    board.classList.remove('solved');
+    paint();
+  });
+  $('tango-hint').addEventListener('click', () => {
+    if (!puzzle || done) return;
+    const wrong = [];
+    for (let i = 0; i < grid.length; i++) {
+      if (puzzle.givens[i] === -1 && grid[i] !== puzzle.solution[i]) wrong.push(i);
+    }
+    if (!wrong.length) return;
+    hinted = true;
+    clock.start();
+    history.push(grid.slice());
+    const pick = wrong[rnd(wrong.length)];
+    grid[pick] = puzzle.solution[pick];
+    paint();
+  });
+
+  return { newPuzzle, hint: () => $('tango-hint').click(), undo: () => $('tango-undo').click(),
+    refreshBest: () => { best.textContent = bestLine('tango', size()); } };
+})();
+
+/* ============================================================
+   PART 5 — QUEENS
+   ============================================================ */
+
+const Queens = (() => {
+  const wrap = $('queens-wrap'), board = $('queens-board'), overlay = $('queens-overlay');
+  const status = $('queens-status'), best = $('queens-best');
+  const clock = new Clock($('queens-clock'));
+  const EMPTY = 0, DOT_MARK = 1, QUEEN = 2;
+  let puzzle = null, marks = [], history = [], done = false, hinted = false, cellNodes = [];
+  let revealed = new Set();     // crowns the Hint button handed over
+
+  const size = () => Number($('queens-size').value);
+
+  function newPuzzle() {
+    const n = size();
+    withSpinner(wrap, () => {
+      const made = generateQueens(n);
+      if (!made) { status.textContent = 'That one got away — press New puzzle again.'; return; }
+      puzzle = made;
+      marks = new Array(n * n).fill(EMPTY);
+      history = []; done = false; hinted = false; revealed = new Set();
+      clock.reset();
+      build();
+      say('One crown per row, column and colour.');
+      best.textContent = bestLine('queens', n);
+    });
+  }
+
+  function say(text, cls = '') {
+    status.textContent = text;
+    status.className = 'status ' + cls;
+  }
+
+  function build() {
+    const n = puzzle.n;
+    board.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+    board.style.gridTemplateRows = `repeat(${n}, 1fr)`;
+    board.replaceChildren();
+    board.classList.remove('solved');
+    cellNodes = [];
+    for (let i = 0; i < n * n; i++) {
+      const cell = document.createElement('button');
+      cell.className = 'qcell';
+      cell.style.setProperty('--fill', `var(--r${puzzle.region[i] % 9})`);
+      cell.addEventListener('click', () => cycle(i));
+      cell.addEventListener('contextmenu', event => { event.preventDefault(); cycle(i, true); });
+      cellNodes.push(cell);
+      board.appendChild(cell);
+    }
+    drawRegionEdges();
+    paint();
+  }
+
+  // Thick lines wherever two colour regions meet, plus the outer frame.
+  function drawRegionEdges() {
+    const n = puzzle.n;
+    overlay.setAttribute('viewBox', `0 0 ${n} ${n}`);
+    overlay.replaceChildren();
+    let d = '';
+    for (let i = 0; i < n * n; i++) {
+      const r = (i / n) | 0, c = i % n;
+      const g = puzzle.region[i];
+      if (r === 0 || puzzle.region[i - n] !== g) d += `M${c} ${r}h1`;
+      if (c === 0 || puzzle.region[i - 1] !== g) d += `M${c} ${r}v1`;
+      if (r === n - 1) d += `M${c} ${r + 1}h1`;
+      if (c === n - 1) d += `M${c + 1} ${r}v1`;
+    }
+    overlay.appendChild(svgEl('path', {
+      d, fill: 'none', stroke: 'var(--line-strong)', 'stroke-width': 0.045,
+      'stroke-linecap': 'square', opacity: .85,
+    }));
+  }
+
+  function cycle(i, backwards) {
+    if (done) return;
+    history.push(marks.slice());
+    const order = backwards ? [EMPTY, QUEEN, DOT_MARK] : [EMPTY, DOT_MARK, QUEEN];
+    marks[i] = order[(order.indexOf(marks[i]) + 1) % 3];
+    clock.start();
+    paint();
+  }
+
+  // Crowns that see each other, by row, column, region or touching.
+  function findClashes() {
+    const n = puzzle.n;
+    const queens = [];
+    for (let i = 0; i < n * n; i++) if (marks[i] === QUEEN) queens.push(i);
+    const bad = new Set();
+    for (let a = 0; a < queens.length; a++) {
+      for (let b = a + 1; b < queens.length; b++) {
+        const [i, j] = [queens[a], queens[b]];
+        const ri = (i / n) | 0, ci = i % n, rj = (j / n) | 0, cj = j % n;
+        const clash = ri === rj || ci === cj || puzzle.region[i] === puzzle.region[j] ||
+          (Math.abs(ri - rj) <= 1 && Math.abs(ci - cj) <= 1);
+        if (clash) { bad.add(i); bad.add(j); }
+      }
+    }
+    return { queens, bad };
+  }
+
+  function paint() {
+    const { queens, bad } = findClashes();
+    cellNodes.forEach((node, i) => {
+      node.innerHTML = marks[i] === QUEEN ? CROWN : marks[i] === DOT_MARK ? DOT : '';
+      node.classList.toggle('err', bad.has(i));
+      node.classList.toggle('hint', revealed.has(i) && marks[i] === QUEEN && !bad.has(i));
+      node.style.color = marks[i] === QUEEN ? 'var(--line-strong)' : 'rgba(120,120,120,.55)';
+    });
+
+    if (done) return;
+    if (queens.length === puzzle.n && bad.size === 0) {
+      done = true;
+      clock.stop();
+      board.classList.add('solved');
+      const note = recordWin('queens', puzzle.n, clock.read(), hinted);
+      say(`Crowned in ${formatTime(clock.read())} — ${note}`, 'win');
+      best.textContent = bestLine('queens', puzzle.n);
+    } else if (bad.size) {
+      say('Two crowns can see each other.', 'warn');
+    } else {
+      const left = puzzle.n - queens.length;
+      say(`${left} crown${left === 1 ? '' : 's'} still to place.`);
+    }
+  }
+
+  $('queens-new').addEventListener('click', newPuzzle);
+  $('queens-size').addEventListener('change', newPuzzle);
+  $('queens-undo').addEventListener('click', () => {
+    if (!puzzle || done || !history.length) return;
+    marks = history.pop();
+    paint();
+  });
+  $('queens-clear').addEventListener('click', () => {
+    if (!puzzle) return;
+    history.push(marks.slice());
+    marks.fill(EMPTY);
+    done = false;
+    clock.reset();
+    board.classList.remove('solved');
+    paint();
+  });
+  $('queens-hint').addEventListener('click', () => {
+    if (!puzzle || done) return;
+    const n = puzzle.n;
+    const rows = [];
+    for (let r = 0; r < n; r++) if (marks[r * n + puzzle.solution[r]] !== QUEEN) rows.push(r);
+    if (!rows.length) return;
+    hinted = true;
+    clock.start();
+    history.push(marks.slice());
+    const row = rows[rnd(rows.length)];
+    for (let c = 0; c < n; c++) if (marks[row * n + c] === QUEEN) marks[row * n + c] = EMPTY;
+    marks[row * n + puzzle.solution[row]] = QUEEN;
+    revealed.add(row * n + puzzle.solution[row]);
+    paint();
+  });
+
+  return { newPuzzle, hint: () => $('queens-hint').click(), undo: () => $('queens-undo').click(),
+    refreshBest: () => { best.textContent = bestLine('queens', size()); } };
+})();
+
+/* ============================================================
+   PART 6 — TABS & KEYBOARD
+   ============================================================ */
+
+const games = { zip: Zip, tango: Tango, queens: Queens };
+const started = new Set();
+let current = 'zip';
+
+function showGame(name) {
+  current = name;
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.setAttribute('aria-selected', String(tab.dataset.game === name));
+  });
+  for (const key of Object.keys(games)) $(`panel-${key}`).hidden = key !== name;
+  if (!started.has(name)) { started.add(name); games[name].newPuzzle(); }
+  else games[name].refreshBest();
+  store.write('pz.tab', name);
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => showGame(tab.dataset.game));
+});
+
+document.addEventListener('keydown', event => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'SELECT' || tag === 'INPUT') return;
+  const key = event.key.toLowerCase();
+  if (key === 'n') games[current].newPuzzle();
+  else if (key === 'u') games[current].undo();
+  else if (key === 'h') games[current].hint();
+  else if (key === '1') showGame('zip');
+  else if (key === '2') showGame('tango');
+  else if (key === '3') showGame('queens');
+});
+
+showGame(store.read('pz.tab', 'zip'));
+</script>
+</body>
+</html>
