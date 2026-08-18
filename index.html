@@ -132,11 +132,14 @@ select { padding-right: 26px; background-image: linear-gradient(45deg, transpare
 
 /* ---------- Queens ---------- */
 .qgrid { display: grid; width: 100%; height: 100%; }
+/* Marks draw in the theme's strong ink so they stay readable on every region
+   colour: near-black on the pastel light palette, near-white on the dark one. */
 .qcell { position: relative; border: 0; padding: 0; margin: 0; cursor: pointer; display: grid; place-items: center;
-  background: var(--fill); box-shadow: inset 0 0 0 .5px rgba(120,120,120,.35); }
+  color: var(--line-strong); background: var(--fill);
+  box-shadow: inset 0 0 0 .5px rgba(120,120,120,.35); }
 .qcell .mark { font-size: 0; line-height: 0; }
 .qcell svg { width: 62%; height: 62%; display: block; }
-.qcell .x { width: 26%; height: 26%; }
+.qcell .x { width: 27%; height: 27%; opacity: .88; }
 .qcell.err svg { animation: shake .3s; }
 .qcell.err::after { content: ""; position: absolute; inset: 6%; border-radius: 8px;
   box-shadow: 0 0 0 3px var(--bad); pointer-events: none; }
@@ -1352,7 +1355,6 @@ const Queens = (() => {
       node.innerHTML = marks[i] === QUEEN ? CROWN : marks[i] === DOT_MARK ? DOT : '';
       node.classList.toggle('err', bad.has(i));
       node.classList.toggle('hint', revealed.has(i) && marks[i] === QUEEN && !bad.has(i));
-      node.style.color = marks[i] === QUEEN ? 'var(--line-strong)' : 'rgba(120,120,120,.55)';
     });
 
     if (done) return;
