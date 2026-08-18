@@ -13,8 +13,30 @@ self-contained HTML file — no server, no build step to play, no network. Open 
 | **Tango** | Fill the grid with suns and moons, balanced and never three alike | 6×6, 8×8 |
 | **Queens** | One crown per row, column and colour region, none touching | 5×5 – 9×9 |
 
-Each game has undo, hints, a timer, and best times kept per board size (in your browser's
-local storage — nothing leaves your machine).
+Each game has undo, a timer, and best times kept per board size (in your browser's local
+storage — nothing leaves your machine).
+
+## Hints that reason, rather than reveal
+
+Press **Hint** in Tango or Queens and it works out a step you could have made yourself,
+says what settles it, and marks the squares its reasoning rests on:
+
+> Two moons sit side by side in column 2, so a third here would make three in a row —
+> this is a sun.
+
+> A dot here: every square still open in the teal region lies in row 5, so that row's
+> crown belongs to the teal region.
+
+Press it a second time to take the step. If something already on the board is wrong, that
+gets flagged first — there is no point deducing from a broken position.
+
+The hints only offer steps that are checkable from what is actually on the board: a crown
+is only proposed once the squares ruling out its neighbours are crowned or dotted, so a
+hint never asserts eliminations you cannot see. Deductions run from the plainest rule
+upward — what a placed crown rules out, then a region penned into one line, then what-if
+(*a crown here would leave the amber region with nowhere to go*). Reasoning alone carries
+100% of Tango boards and 87–100% of Queens boards depending on size; on the rest, the hint
+says so plainly and names a square outright rather than inventing an explanation.
 
 ## Every puzzle has exactly one solution
 
