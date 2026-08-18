@@ -17,6 +17,7 @@
   --cell-fixed: #e6e1d5;
   --accent: #4f46e5;
   --accent-soft: #e8e7fd;
+  --evidence-wash: rgba(0,0,0,.22);      /* shifts brightness, so it shows on any region colour */
   --good: #17795e;
   --bad: #c2410c;
   --bad-soft: #fde4d3;
@@ -41,6 +42,7 @@
     --cell-fixed: #3a3f45;
     --accent: #8b87f5;
     --accent-soft: #2e2c50;
+    --evidence-wash: rgba(255,255,255,.22);
     --good: #4ec99f;
     --bad: #f08a5b;
     --bad-soft: #4a2a1c;
@@ -61,6 +63,7 @@
   --cell-fixed: #3a3f45;
   --accent: #8b87f5;
   --accent-soft: #2e2c50;
+  --evidence-wash: rgba(255,255,255,.22);
   --good: #4ec99f;
   --bad: #f08a5b;
   --bad-soft: #4a2a1c;
@@ -147,6 +150,18 @@ select { padding-right: 26px; background-image: linear-gradient(45deg, transpare
   box-shadow: 0 0 0 3px var(--accent); pointer-events: none; }
 @keyframes shake { 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
 .overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* A hinted square gets a ring; the squares that justify it get a wash, so the
+   evidence reads as part of the same thought as the conclusion. */
+.qcell.target::after, .tcell.target { box-shadow: 0 0 0 3px var(--accent); }
+.qcell.target::after { content: ""; position: absolute; inset: 6%; border-radius: 8px; pointer-events: none; }
+.qcell.why { box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 100px var(--evidence-wash); }
+.tcell.target { border-color: var(--accent); }
+.tcell.why { background: var(--accent-soft); border-color: var(--accent-soft); }
+
+.hint-note { margin: 0 auto 14px; max-width: 460px; padding: 10px 13px; border-radius: 10px;
+  background: var(--accent-soft); border-left: 3px solid var(--accent);
+  font-size: 13.5px; line-height: 1.45; text-wrap: pretty; }
+.hint-note[hidden] { display: none; }
 
 /* ---------- Tango ---------- */
 .tgrid { display: grid; width: 100%; height: 100%; gap: 0; }
@@ -207,6 +222,7 @@ kbd { font: inherit; font-size: 11px; background: var(--cell-alt); border: 1px s
       <span class="spacer"></span>
       <span class="clock" id="zip-clock">0:00</span>
     </div>
+    <div class="hint-note" id="zip-note" hidden></div>
     <div class="board-wrap" id="zip-wrap">
       <div class="loading"><div><div class="spinner"></div>building a fresh path…</div></div>
       <svg class="zboard" id="zip-board" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -243,6 +259,7 @@ kbd { font: inherit; font-size: 11px; background: var(--cell-alt); border: 1px s
       <span class="spacer"></span>
       <span class="clock" id="tango-clock">0:00</span>
     </div>
+    <div class="hint-note" id="tango-note" hidden></div>
     <div class="board-wrap" id="tango-wrap">
       <div class="loading"><div><div class="spinner"></div>balancing suns and moons…</div></div>
       <div class="tgrid" id="tango-board"></div>
@@ -257,6 +274,7 @@ kbd { font: inherit; font-size: 11px; background: var(--cell-alt); border: 1px s
         <li>No <strong>three in a row</strong> of the same symbol, horizontally or vertically.</li>
         <li><strong>=</strong> between two cells means they match; <strong>×</strong> means they differ.</li>
         <li>Every puzzle is solvable by pure logic — you never have to guess.</li>
+        <li><strong>Hint</strong> names the next square and the rule that settles it. Press it again to fill it in.</li>
       </ul>
     </details>
   </section>
@@ -278,6 +296,7 @@ kbd { font: inherit; font-size: 11px; background: var(--cell-alt); border: 1px s
       <span class="spacer"></span>
       <span class="clock" id="queens-clock">0:00</span>
     </div>
+    <div class="hint-note" id="queens-note" hidden></div>
     <div class="board-wrap" id="queens-wrap">
       <div class="loading"><div><div class="spinner"></div>colouring the regions…</div></div>
       <div class="qgrid" id="queens-board"></div>
@@ -291,6 +310,7 @@ kbd { font: inherit; font-size: 11px; background: var(--cell-alt); border: 1px s
         <li>Place one crown in <strong>every row, every column and every colour region</strong>.</li>
         <li>No two crowns may <strong>touch</strong> — not even at a corner.</li>
         <li>Click once for a <strong>dot</strong> (your "definitely not here" mark), twice for a <strong>crown</strong>, three times to clear.</li>
+        <li><strong>Hint</strong> works out the next step and explains why, marking the squares its reasoning rests on. Press it again to take that step.</li>
       </ul>
     </details>
   </section>
@@ -808,6 +828,343 @@ function generateZip(w, h) {
   }
   return null;
 }
+
+/* ==================== REASONED HINTS ====================
+   A hint should teach rather than reveal: work out a step the player could
+   deduce from what is already on the board, and say what makes it follow.
+   Both engines return
+     { kind, cell, value?, because, text }
+   with `kind` one of 'crown' | 'dot' | 'sun' | 'moon' | 'mistake' | 'reveal',
+   and `because` listing the squares that justify the step, so the board can
+   show the evidence next to the conclusion. */
+
+const REGION_NAMES = ['red', 'amber', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple', 'grey'];
+const spot = (i, n) => `row ${((i / n) | 0) + 1}, column ${(i % n) + 1}`;
+
+/* ---------- Queens ---------- */
+
+const Q_EMPTY = 0, Q_DOT = 1, Q_CROWN = 2;
+
+// Why two crowns cannot both stand, or null if they can.
+function queensClash(n, region, a, b) {
+  const ar = (a / n) | 0, ac = a % n, br = (b / n) | 0, bc = b % n;
+  if (ar === br) return `both sit in row ${ar + 1}`;
+  if (ac === bc) return `both sit in column ${ac + 1}`;
+  if (region[a] === region[b]) return 'sit in the same colour region';
+  if (Math.abs(ar - br) <= 1 && Math.abs(ac - bc) <= 1) return 'are touching';
+  return null;
+}
+
+// Squares still open for a crown given the crowns already placed. Each closed
+// square remembers which crown closed it, and why.
+function queensOpenSquares(n, region, crowns, names) {
+  const open = new Uint8Array(n * n).fill(1);
+  const why = new Array(n * n).fill(null);
+  const close = (i, text, by) => {
+    if (open[i]) { open[i] = 0; why[i] = { text, because: [by], tier: 1 }; }
+  };
+  for (const c of crowns) {
+    const cr = (c / n) | 0, cc = c % n;
+    for (let i = 0; i < n * n; i++) {
+      if (i === c) continue;
+      const r = (i / n) | 0, cl = i % n;
+      if (r === cr) close(i, `row ${cr + 1} already has its crown`, c);
+      else if (cl === cc) close(i, `column ${cc + 1} already has its crown`, c);
+      else if (region[i] === region[c]) close(i, `the ${names[region[c]]} region already has its crown`, c);
+      else if (Math.abs(r - cr) <= 1 && Math.abs(cl - cc) <= 1) close(i, 'it touches a crown', c);
+    }
+    open[c] = 0;
+  }
+  return { open, why };
+}
+
+// Every open square of one region sharing a row (or column) claims that line for
+// the region, so nothing else on the line can hold a crown. Also the mirror
+// case, where a line's open squares all belong to a single region.
+function queensSqueezes(n, region, open, taken, names) {
+  const out = [];
+  const byRegion = [], byRow = [], byCol = [];
+  for (let g = 0; g < n; g++) { byRegion.push([]); byRow.push([]); byCol.push([]); }
+  for (let i = 0; i < n * n; i++) {
+    if (!open[i]) continue;
+    byRegion[region[i]].push(i);
+    byRow[(i / n) | 0].push(i);
+    byCol[i % n].push(i);
+  }
+  const axes = [
+    { label: 'row', of: i => (i / n) | 0, lines: byRow, seen: taken.row },
+    { label: 'column', of: i => i % n, lines: byCol, seen: taken.col },
+  ];
+
+  for (let g = 0; g < n; g++) {
+    const cells = byRegion[g];
+    if (!cells.length || taken.region.has(g)) continue;
+    for (const axis of axes) {
+      const lines = new Set(cells.map(axis.of));
+      if (lines.size !== 1) continue;
+      const line = [...lines][0];
+      for (const i of axis.lines[line]) {
+        if (region[i] === g) continue;
+        out.push({ cell: i, because: cells,
+          text: `every square still open in the ${names[g]} region lies in ${axis.label} ${line + 1}, so that ${axis.label}'s crown belongs to the ${names[g]} region` });
+      }
+    }
+  }
+
+  for (const axis of axes) {
+    for (let line = 0; line < n; line++) {
+      const cells = axis.lines[line];
+      if (!cells.length || axis.seen.has(line)) continue;
+      const regions = new Set(cells.map(i => region[i]));
+      if (regions.size !== 1) continue;
+      const g = [...regions][0];
+      if (taken.region.has(g)) continue;
+      for (const i of byRegion[g]) {
+        if (axis.of(i) === line) continue;
+        out.push({ cell: i, because: cells,
+          text: `${axis.label} ${line + 1} can only be filled from the ${names[g]} region, so that region's crown goes there rather than here` });
+      }
+    }
+  }
+  return out;
+}
+
+// One step of what-if: try a crown on an open square and see whether it strands
+// a region, row or column with nowhere left to go.
+function queensLookahead(n, region, crowns, open, taken, names) {
+  for (let x = 0; x < n * n; x++) {
+    if (!open[x]) continue;
+    const fresh = queensOpenSquares(n, region, crowns.concat(x), names).open;
+    const trial = new Uint8Array(n * n);
+    for (let i = 0; i < n * n; i++) trial[i] = fresh[i] && open[i] ? 1 : 0;
+    // carry the squeezes through the trial too, so the what-if sees as far as
+    // the player would after following the obvious consequences
+    const trialTaken = {
+      region: new Set([...taken.region, region[x]]),
+      row: new Set([...taken.row, (x / n) | 0]),
+      col: new Set([...taken.col, x % n]),
+    };
+    for (let pass = 0; pass < 2; pass++) {
+      let moved = false;
+      for (const squeeze of queensSqueezes(n, region, trial, trialTaken, names)) {
+        if (!trial[squeeze.cell]) continue;
+        trial[squeeze.cell] = 0;
+        moved = true;
+      }
+      if (!moved) break;
+    }
+
+    const groups = [
+      { label: g => `the ${names[g]} region`, of: i => region[i], seen: taken.region, self: region[x] },
+      { label: r => `row ${r + 1}`, of: i => (i / n) | 0, seen: taken.row, self: (x / n) | 0 },
+      { label: c => `column ${c + 1}`, of: i => i % n, seen: taken.col, self: x % n },
+    ];
+    for (const group of groups) {
+      for (let g = 0; g < n; g++) {
+        if (group.seen.has(g) || g === group.self) continue;
+        let survives = false;
+        const stranded = [];
+        for (let i = 0; i < n * n; i++) {
+          if (group.of(i) !== g) continue;
+          if (trial[i]) { survives = true; break; }
+          if (open[i]) stranded.push(i);
+        }
+        if (survives) continue;
+        return { cell: x, because: stranded,
+          text: `a crown here would leave ${group.label(g)} with nowhere to go` };
+      }
+    }
+  }
+  return null;
+}
+
+// Close every square the rules can rule out, feeding each deduction back in so
+// later rules build on it. Without this the reasoning forgets what it just
+// worked out and stalls soon after the opening. Every closed square keeps the
+// reason that closed it, tiered so a hint can offer the plainest one first.
+function queensDeduce(n, region, crowns, names) {
+  const { open, why } = queensOpenSquares(n, region, crowns, names);
+  const taken = { region: new Set(), row: new Set(), col: new Set() };
+  for (const c of crowns) {
+    taken.region.add(region[c]); taken.row.add((c / n) | 0); taken.col.add(c % n);
+  }
+
+  for (let guard = 0; guard < n * n * 2; guard++) {
+    let changed = false;
+    for (const squeeze of queensSqueezes(n, region, open, taken, names)) {
+      if (!open[squeeze.cell]) continue;
+      open[squeeze.cell] = 0;
+      why[squeeze.cell] = { text: squeeze.text, because: squeeze.because, tier: 2 };
+      changed = true;
+    }
+    if (changed) continue;                      // cheap rules until they run dry
+    const strand = queensLookahead(n, region, crowns, open, taken, names);
+    if (!strand) break;
+    open[strand.cell] = 0;
+    why[strand.cell] = { text: strand.text, because: strand.because, tier: 3 };
+  }
+  return { open, why, taken };
+}
+
+function queensHint(n, region, marks, solution, names = REGION_NAMES) {
+  const crowns = [];
+  for (let i = 0; i < n * n; i++) if (marks[i] === Q_CROWN) crowns.push(i);
+
+  // 1. Two crowns that cannot coexist.
+  for (let a = 0; a < crowns.length; a++) {
+    for (let b = a + 1; b < crowns.length; b++) {
+      const clash = queensClash(n, region, crowns[a], crowns[b]);
+      if (clash) {
+        return { kind: 'mistake', cell: crowns[b], because: [crowns[a]],
+          text: `These two crowns ${clash}, so one of them has to go.` };
+      }
+    }
+  }
+  // 2. A crown that breaks no rule yet, but that no solution can live with.
+  for (const c of crowns) {
+    if (solution[(c / n) | 0] !== c % n) {
+      return { kind: 'mistake', cell: c, because: [],
+        text: `This crown breaks no rule yet, but the board can't be finished with it here — take it back.` };
+    }
+  }
+
+  const { open, why, taken } = queensDeduce(n, region, crowns, names);
+
+  // A square the player has ruled out that the answer actually needs.
+  for (let i = 0; i < n * n; i++) {
+    if (marks[i] === Q_DOT && solution[(i / n) | 0] === i % n) {
+      return { kind: 'mistake', cell: i, because: [],
+        text: `This dot can't be right — the board can't be finished with this square ruled out.` };
+    }
+  }
+
+  const buckets = [
+    { label: g => `the ${names[g]} region`, key: i => region[i], done: taken.region },
+    { label: r => `row ${r + 1}`, key: i => (i / n) | 0, done: taken.row },
+    { label: c => `column ${c + 1}`, key: i => i % n, done: taken.col },
+  ];
+  // Only one square left, counting just the crowns on the board and the dots the
+  // player has already made — a step they can check by looking, rather than one
+  // resting on deductions they have not seen yet.
+  const single = (visible, phrase) => {
+    for (const bucket of buckets) {
+      const cells = new Array(n).fill(null).map(() => []);
+      for (let i = 0; i < n * n; i++) if (visible[i]) cells[bucket.key(i)].push(i);
+      for (let g = 0; g < n; g++) {
+        if (bucket.done.has(g) || cells[g].length !== 1) continue;
+        const cell = cells[g][0];
+        const because = [];
+        for (let i = 0; i < n * n; i++) {
+          if (bucket.key(i) !== g || visible[i] || i === cell) continue;
+          if (marks[i] === Q_DOT) because.push(i);            // the player's own dot
+          else if (why[i]) because.push(...why[i].because);   // or the crown that rules it out
+        }
+        return { kind: 'crown', cell, because: [...new Set(because)].slice(0, 10),
+          text: phrase(bucket.label(g)) };
+      }
+    }
+    return null;
+  };
+
+  // What the player can actually see: crowns they have placed, dots they have
+  // made. Deeper deductions belong in an elimination hint that explains itself,
+  // not in a crown that appears out of nowhere.
+  const fromCrowns = queensOpenSquares(n, region, crowns, names).open;
+  const onBoard = new Uint8Array(n * n);
+  for (let i = 0; i < n * n; i++) onBoard[i] = fromCrowns[i] && marks[i] !== Q_DOT ? 1 : 0;
+  const plain = single(onBoard, where => `Only one square is left in ${where} — everything else there is crowned out or dotted, so this must be a crown.`);
+  if (plain) return plain;
+
+  // Otherwise the plainest square still to rule out.
+  for (const tier of [1, 2, 3]) {
+    for (let i = 0; i < n * n; i++) {
+      if (open[i] || marks[i] !== Q_EMPTY || !why[i] || why[i].tier !== tier) continue;
+      return { kind: 'dot', cell: i, because: why[i].because.slice(0, 10),
+        text: `A dot here: ${why[i].text}.` };
+    }
+  }
+
+  // Everything obvious is marked: fall back on the longer chain.
+  const chained = single(open, where => `Follow all those dots through and only one square is left in ${where} — it has to be a crown.`);
+  if (chained) return chained;
+
+  // 5. Nothing the rules can reach — name a square outright.
+  for (let r = 0; r < n; r++) {
+    const cell = r * n + solution[r];
+    if (marks[cell] !== Q_CROWN) {
+      return { kind: 'reveal', cell, because: [],
+        text: `No short step from here, so here's one outright: row ${r + 1}'s crown goes at ${spot(cell, n)}.` };
+    }
+  }
+  return null;
+}
+
+/* ---------- Tango ---------- */
+
+function tangoHint(n, grid, edges, solution, glyphs = ['sun', 'moon']) {
+  const half = n / 2;
+  const other = v => glyphs[1 - v];
+  const lines = [];
+  for (let r = 0; r < n; r++) lines.push({ label: `row ${r + 1}`, cells: [...Array(n).keys()].map(c => r * n + c) });
+  for (let c = 0; c < n; c++) lines.push({ label: `column ${c + 1}`, cells: [...Array(n).keys()].map(r => r * n + c) });
+
+  // 1. Anything already wrong outranks any new deduction.
+  for (let i = 0; i < n * n; i++) {
+    if (grid[i] !== -1 && grid[i] !== solution[i]) {
+      return { kind: 'mistake', cell: i, because: [],
+        text: `The ${glyphs[grid[i]]} at ${spot(i, n)} can't be right — take it back and the rest will follow.` };
+    }
+  }
+
+  // 2. A sign next to a filled square settles its neighbour.
+  for (const e of edges) {
+    for (const [from, to] of [[e.a, e.b], [e.b, e.a]]) {
+      if (grid[from] === -1 || grid[to] !== -1) continue;
+      const value = e.type === '=' ? grid[from] : 1 - grid[from];
+      return { kind: glyphs[value], cell: to, value, because: [from],
+        text: `The ${e.type === '=' ? '=' : '×'} sign says these two squares ${e.type === '=' ? 'match' : 'differ'}, and its neighbour is a ${glyphs[grid[from]]} — so this one is a ${glyphs[value]}.` };
+    }
+  }
+
+  // 3. Never three alike: a pair, or a gap between two of a kind.
+  for (const line of lines) {
+    for (let k = 0; k + 2 < n; k++) {
+      const trio = [line.cells[k], line.cells[k + 1], line.cells[k + 2]];
+      const values = trio.map(i => grid[i]);
+      if (values.filter(v => v === -1).length !== 1) continue;
+      const known = values.filter(v => v !== -1);
+      if (known[0] !== known[1]) continue;
+      const cell = trio[values.indexOf(-1)];
+      const value = 1 - known[0];
+      return { kind: glyphs[value], cell, value, because: trio.filter(i => i !== cell),
+        text: values.indexOf(-1) === 1
+          ? `Two ${glyphs[known[0]]}s in ${line.label} with one gap between them — filling it would make three in a row, so this is a ${other(known[0])}.`
+          : `Two ${glyphs[known[0]]}s sit side by side in ${line.label}, so a third here would make three in a row — this is a ${other(known[0])}.` };
+    }
+  }
+
+  // 4. A line that already holds its share of one symbol.
+  for (const line of lines) {
+    for (let v = 0; v < 2; v++) {
+      const placed = line.cells.filter(i => grid[i] === v);
+      if (placed.length !== half) continue;
+      const empty = line.cells.find(i => grid[i] === -1);
+      if (empty === undefined) continue;
+      const label = line.label[0].toUpperCase() + line.label.slice(1);
+      return { kind: glyphs[1 - v], cell: empty, value: 1 - v, because: placed,
+        text: `${label} already has all ${half} of its ${glyphs[v]}s, so every square left in it is a ${other(v)}.` };
+    }
+  }
+
+  // 5. Nothing the basic rules can reach — name a square outright.
+  for (let i = 0; i < n * n; i++) {
+    if (grid[i] === -1) {
+      return { kind: glyphs[solution[i]], cell: i, value: solution[i], because: [],
+        text: `No short step from here, so here's one outright: ${spot(i, n)} is a ${glyphs[solution[i]]}.` };
+    }
+  }
+  return null;
+}
 /* ENGINE:END */
 
 /* ============================================================
@@ -909,6 +1266,7 @@ const MOON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#6b7cd6" d
 
 const Zip = (() => {
   const wrap = $('zip-wrap'), board = $('zip-board'), status = $('zip-status'), best = $('zip-best');
+  const note = $('zip-note');
   const clock = new Clock($('zip-clock'));
   const CELL = 100;
   let puzzle = null, path = [], done = false, hinted = false, dragging = false, lastCell = -1;
@@ -922,6 +1280,7 @@ const Zip = (() => {
       if (!made) { status.textContent = 'That one got away — press New puzzle again.'; return; }
       puzzle = made;
       path = []; done = false; hinted = false;
+      note.hidden = true; note.textContent = '';
       clock.reset();
       render();
       say('Drag from 1 to fill every cell.');
@@ -1069,6 +1428,10 @@ const Zip = (() => {
     while (common < path.length && path[common] === puzzle.path[common]) common++;
     // on track: lay down one more cell. Off track: rewind to the last good cell.
     path = puzzle.path.slice(0, common === path.length ? common + 1 : Math.max(common, 1));
+    note.textContent = common === path.length
+      ? 'Stepped the line on by one square along the route that works.'
+      : 'Rewound to the last square that still leads somewhere — the rest had no way through.';
+    note.hidden = false;
     after();
   });
 
@@ -1082,8 +1445,11 @@ const Zip = (() => {
 
 const Tango = (() => {
   const wrap = $('tango-wrap'), board = $('tango-board'), status = $('tango-status'), best = $('tango-best');
+  const note = $('tango-note'), hintButton = $('tango-hint');
   const clock = new Clock($('tango-clock'));
   let puzzle = null, cells = [], grid = [], history = [], done = false, hinted = false;
+  let pending = null;           // a hint shown but not yet acted on
+  let noteText = '';
   let cellNodes = [], signNodes = [];
 
   const size = () => Number($('tango-size').value);
@@ -1098,6 +1464,7 @@ const Tango = (() => {
       puzzle = made;
       grid = made.givens.slice();
       history = []; done = false; hinted = false;
+      pending = null; noteText = '';
       clock.reset();
       build();
       say('Fill every cell with a sun or a moon.');
@@ -1150,6 +1517,7 @@ const Tango = (() => {
 
   function cycle(i, backwards) {
     if (done || puzzle.givens[i] !== -1) return;
+    pending = null; noteText = '';
     history.push(grid.slice());
     const order = backwards ? [-1, 1, 0] : [-1, 0, 1];
     grid[i] = order[(order.indexOf(grid[i]) + 1) % 3];
@@ -1188,12 +1556,19 @@ const Tango = (() => {
 
   function paint() {
     const { badCells, badSigns } = findFaults();
+    const evidence = new Set(pending ? pending.because : []);
     cellNodes.forEach((node, i) => {
       node.innerHTML = grid[i] === 0 ? SUN : grid[i] === 1 ? MOON : '';
-      node.classList.toggle('fixed', puzzle.givens[i] !== -1);
-      node.classList.toggle('err', badCells.has(i));
+      // one highlight per square, strongest first
+      const flag = badCells.has(i) ? 'err'
+        : pending && pending.cell === i ? 'target'
+        : evidence.has(i) ? 'why' : '';
+      node.className = 'tcell' + (puzzle.givens[i] !== -1 ? ' fixed' : '') + (flag ? ' ' + flag : '');
     });
     signNodes.forEach((node, idx) => node.classList.toggle('err', badSigns.has(idx)));
+    note.textContent = noteText;
+    note.hidden = !noteText;
+    hintButton.textContent = pending ? 'Place it' : 'Hint';
 
     if (done) return;
     const filled = grid.every(v => v !== -1);
@@ -1225,22 +1600,30 @@ const Tango = (() => {
     history.push(grid.slice());
     grid = puzzle.givens.slice();
     done = false;
+    pending = null; noteText = '';
     clock.reset();
     board.classList.remove('solved');
     paint();
   });
-  $('tango-hint').addEventListener('click', () => {
+  // First press explains the next step and points at it; second press takes it.
+  hintButton.addEventListener('click', () => {
     if (!puzzle || done) return;
-    const wrong = [];
-    for (let i = 0; i < grid.length; i++) {
-      if (puzzle.givens[i] === -1 && grid[i] !== puzzle.solution[i]) wrong.push(i);
-    }
-    if (!wrong.length) return;
     hinted = true;
     clock.start();
-    history.push(grid.slice());
-    const pick = wrong[rnd(wrong.length)];
-    grid[pick] = puzzle.solution[pick];
+
+    if (pending) {
+      const hint = pending;
+      pending = null;
+      history.push(grid.slice());
+      grid[hint.cell] = hint.kind === 'mistake' ? -1 : hint.value;
+      paint();
+      return;
+    }
+
+    const hint = tangoHint(puzzle.n, grid, puzzle.edges, puzzle.solution);
+    if (!hint) return;
+    pending = hint;
+    noteText = hint.text;
     paint();
   });
 
@@ -1254,11 +1637,14 @@ const Tango = (() => {
 
 const Queens = (() => {
   const wrap = $('queens-wrap'), board = $('queens-board'), overlay = $('queens-overlay');
-  const status = $('queens-status'), best = $('queens-best');
+  const status = $('queens-status'), best = $('queens-best'), note = $('queens-note');
+  const hintButton = $('queens-hint');
   const clock = new Clock($('queens-clock'));
   const EMPTY = 0, DOT_MARK = 1, QUEEN = 2;
   let puzzle = null, marks = [], history = [], done = false, hinted = false, cellNodes = [];
   let revealed = new Set();     // crowns the Hint button handed over
+  let pending = null;           // a hint shown but not yet acted on
+  let noteText = '';
 
   const size = () => Number($('queens-size').value);
 
@@ -1270,6 +1656,7 @@ const Queens = (() => {
       puzzle = made;
       marks = new Array(n * n).fill(EMPTY);
       history = []; done = false; hinted = false; revealed = new Set();
+      pending = null; noteText = '';
       clock.reset();
       build();
       say('One crown per row, column and colour.');
@@ -1324,6 +1711,7 @@ const Queens = (() => {
 
   function cycle(i, backwards) {
     if (done) return;
+    pending = null; noteText = '';
     history.push(marks.slice());
     const order = backwards ? [EMPTY, QUEEN, DOT_MARK] : [EMPTY, DOT_MARK, QUEEN];
     marks[i] = order[(order.indexOf(marks[i]) + 1) % 3];
@@ -1351,11 +1739,19 @@ const Queens = (() => {
 
   function paint() {
     const { queens, bad } = findClashes();
+    const evidence = new Set(pending ? pending.because : []);
     cellNodes.forEach((node, i) => {
       node.innerHTML = marks[i] === QUEEN ? CROWN : marks[i] === DOT_MARK ? DOT : '';
-      node.classList.toggle('err', bad.has(i));
-      node.classList.toggle('hint', revealed.has(i) && marks[i] === QUEEN && !bad.has(i));
+      // one highlight per square, strongest first
+      const flag = bad.has(i) ? 'err'
+        : pending && pending.cell === i ? 'target'
+        : evidence.has(i) ? 'why'
+        : revealed.has(i) && marks[i] === QUEEN ? 'hint' : '';
+      node.className = 'qcell' + (flag ? ' ' + flag : '');
     });
+    note.textContent = noteText;
+    note.hidden = !noteText;
+    hintButton.textContent = pending ? 'Place it' : 'Hint';
 
     if (done) return;
     if (queens.length === puzzle.n && bad.size === 0) {
@@ -1385,23 +1781,40 @@ const Queens = (() => {
     history.push(marks.slice());
     marks.fill(EMPTY);
     done = false;
+    pending = null; noteText = '';
     clock.reset();
     board.classList.remove('solved');
     paint();
   });
-  $('queens-hint').addEventListener('click', () => {
+  // First press explains the next step and points at it; second press takes it.
+  hintButton.addEventListener('click', () => {
     if (!puzzle || done) return;
-    const n = puzzle.n;
-    const rows = [];
-    for (let r = 0; r < n; r++) if (marks[r * n + puzzle.solution[r]] !== QUEEN) rows.push(r);
-    if (!rows.length) return;
     hinted = true;
     clock.start();
-    history.push(marks.slice());
-    const row = rows[rnd(rows.length)];
-    for (let c = 0; c < n; c++) if (marks[row * n + c] === QUEEN) marks[row * n + c] = EMPTY;
-    marks[row * n + puzzle.solution[row]] = QUEEN;
-    revealed.add(row * n + puzzle.solution[row]);
+
+    if (pending) {
+      const hint = pending;
+      pending = null;
+      history.push(marks.slice());
+      const n = puzzle.n;
+      if (hint.kind === 'mistake') {
+        marks[hint.cell] = EMPTY;
+      } else if (hint.kind === 'dot') {
+        marks[hint.cell] = DOT_MARK;
+      } else {
+        const row = (hint.cell / n) | 0;
+        for (let c = 0; c < n; c++) if (marks[row * n + c] === QUEEN) marks[row * n + c] = EMPTY;
+        marks[hint.cell] = QUEEN;
+        revealed.add(hint.cell);
+      }
+      paint();
+      return;
+    }
+
+    const hint = queensHint(puzzle.n, puzzle.region, marks, puzzle.solution);
+    if (!hint) return;
+    pending = hint;
+    noteText = hint.text;
     paint();
   });
 

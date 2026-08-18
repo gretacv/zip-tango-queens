@@ -145,4 +145,113 @@ for (const [w, h] of [[5, 5], [6, 6], [7, 7], [8, 8]]) {
   console.log(`${w}x${h}: ${made}/10 in ${Date.now() - t0}ms (worst ${worst}ms), avg ${(checkpoints / made).toFixed(1)} numbers`);
 }
 
+console.log('--- HINTS: QUEENS ---');
+for (const n of [6, 8]) {
+  let boards = 0, steps = 0, reveals = 0, worstReveals = 0, solvedByLogic = 0;
+  for (let k = 0; k < 20; k++) {
+    const p = E.generateQueens(n);
+    if (!p) continue;
+    boards++;
+    const marks = new Array(n * n).fill(0);
+    const solutionCells = new Set(p.solution.map((c, r) => r * n + c));
+    // nothing is ruled out on an untouched board, so the opening hint must be a
+    // step the player can verify — an elimination, not a crown out of nowhere
+    const opening = E.queensHint(n, p.region, marks, p.solution);
+    check(opening.kind === 'dot', `n=${n} opening hint is a verifiable elimination, got ${opening.kind}`);
+    let used = 0, revealed = 0, guard = 0;
+    while (guard++ < n * n * 4) {
+      const crowns = marks.reduce((acc, m) => acc + (m === 2 ? 1 : 0), 0);
+      if (crowns === n) break;
+      const hint = E.queensHint(n, p.region, marks, p.solution);
+      check(!!hint, `n=${n} hint offered while unsolved`);
+      if (!hint) break;
+      check(typeof hint.text === 'string' && hint.text.length > 12, 'hint carries an explanation');
+      check(hint.cell >= 0 && hint.cell < n * n, 'hint points at a real square');
+      check(hint.because.every(i => i >= 0 && i < n * n), 'evidence squares are real');
+      // the whole point: a hint must never rule out a square the solution needs
+      if (hint.kind === 'dot') check(!solutionCells.has(hint.cell), `n=${n} dot hint never lands on a solution square`);
+      if (hint.kind === 'crown') check(solutionCells.has(hint.cell), `n=${n} crown hint always lands on a solution square`);
+      if (hint.kind === 'mistake') check(false, 'no mistake reported on a clean board');
+      if (hint.kind === 'reveal') revealed++;
+      marks[hint.cell] = hint.kind === 'dot' ? 1 : 2;
+      used++;
+    }
+    const crowns = marks.reduce((acc, m) => acc + (m === 2 ? 1 : 0), 0);
+    check(crowns === n, `n=${n} hints alone finish the board`);
+    for (const cell of solutionCells) check(marks[cell] === 2, 'every solution square ends crowned');
+    steps += used; reveals += revealed; worstReveals = Math.max(worstReveals, revealed);
+    if (!revealed) solvedByLogic++;
+  }
+  console.log(`n=${n}: ${boards} boards, avg ${(steps / boards).toFixed(1)} hints to finish, ` +
+    `${solvedByLogic}/${boards} needed no outright reveal (avg ${(reveals / boards).toFixed(2)}, worst ${worstReveals})`);
+}
+
+// a wrong crown must be called out before anything else
+{
+  const n = 7, p = E.generateQueens(n);
+  const marks = new Array(n * n).fill(0);
+  const wrongRow = 0;
+  let wrongCol = (p.solution[wrongRow] + 2) % n;
+  marks[wrongRow * n + wrongCol] = 2;
+  const hint = E.queensHint(n, p.region, marks, p.solution);
+  check(hint.kind === 'mistake' && hint.cell === wrongRow * n + wrongCol, 'wrong crown is reported as a mistake');
+  // two crowns in one row
+  const marks2 = new Array(n * n).fill(0);
+  marks2[0] = 2; marks2[3] = 2;
+  const hint2 = E.queensHint(n, p.region, marks2, p.solution);
+  check(hint2.kind === 'mistake' && /row 1/.test(hint2.text), 'clashing crowns explain the clash: ' + hint2.text);
+}
+
+{
+  const n = 6, p = E.generateQueens(n);
+  const marks = new Array(n * n).fill(0);
+  marks[0 * n + p.solution[0]] = 1;                 // dot on a square the answer needs
+  const hint = E.queensHint(n, p.region, marks, p.solution);
+  check(hint.kind === 'mistake' && hint.cell === 0 * n + p.solution[0], 'a dot on a solution square is flagged');
+}
+
+console.log('--- HINTS: TANGO ---');
+for (const n of [6, 8]) {
+  for (const extras of [3, 0]) {
+    let boards = 0, steps = 0, reveals = 0, solvedByLogic = 0;
+    for (let k = 0; k < 12; k++) {
+      let p = null, tries = 0;
+      while (!p && tries++ < 30) p = E.generateTango(n, extras);
+      if (!p) continue;
+      boards++;
+      const grid = p.givens.slice();
+      let used = 0, revealed = 0, guard = 0;
+      while (guard++ < n * n * 4 && grid.some(v => v === -1)) {
+        const hint = E.tangoHint(n, grid, p.edges, p.solution);
+        check(!!hint, `n=${n} hint offered while unsolved`);
+        if (!hint) break;
+        check(typeof hint.text === 'string' && hint.text.length > 12, 'hint carries an explanation');
+        check(hint.value === p.solution[hint.cell], `n=${n} hint agrees with the solution`);
+        check(grid[hint.cell] === -1, 'hint targets an empty square');
+        if (/outright/.test(hint.text)) revealed++;
+        grid[hint.cell] = hint.value;
+        used++;
+      }
+      check(grid.every((v, i) => v === p.solution[i]), `n=${n} hints alone finish the grid`);
+      steps += used; reveals += revealed;
+      if (!revealed) solvedByLogic++;
+    }
+    console.log(`n=${n} extras=${extras}: ${boards} boards, avg ${(steps / boards).toFixed(1)} hints to finish, ` +
+      `${solvedByLogic}/${boards} needed no outright reveal`);
+  }
+}
+
+// a wrong symbol must be called out before anything else
+{
+  const n = 6;
+  let p = null, tries = 0;
+  while (!p && tries++ < 30) p = E.generateTango(n, 3);
+  const grid = p.givens.slice();
+  const empty = grid.findIndex(v => v === -1);
+  grid[empty] = 1 - p.solution[empty];
+  const hint = E.tangoHint(n, grid, p.edges, p.solution);
+  check(hint.kind === 'mistake' && hint.cell === empty, 'wrong symbol is reported as a mistake');
+  check(/can't be right/.test(hint.text), 'mistake hint says so plainly');
+}
+
 console.log(failures ? `\n${failures} FAILURES` : '\nAll checks passed');
